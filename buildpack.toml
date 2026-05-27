@@ -1,0 +1,16 @@
+api = "0.10"
+
+[buildpack]
+id      = "aluminumio/buildpack-libtorch-cnb"
+version = "1.0.0"
+name    = "LibTorch CPU"
+homepage = "https://github.com/aluminumio/buildpack-libtorch-cpu"
+
+[[stacks]]
+id = "heroku-24"
+
+[[stacks]]
+id = "heroku-22"
+
+[[stacks]]
+id = "*"

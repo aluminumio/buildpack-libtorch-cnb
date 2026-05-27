@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# CNB v0.10 build phase. Stages LibTorch C++ (CPU) as a CNB layer so:
+#   - heroku/ruby (next buildpack) can compile torch-rb with the headers
+#   - runtime dynos can dlopen libtorch_cpu.so via LD_LIBRARY_PATH
+#
+#   $1 = layers_dir (e.g. /layers)
+#   $2 = platform_dir
+#   $3 = plan_path
+
+set -euo pipefail
+
+layers_dir="$1"
+
+LIBTORCH_VERSION="${LIBTORCH_VERSION:-2.12.0}"
+LIBTORCH_URL="https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-${LIBTORCH_VERSION}%2Bcpu.zip"
+
+layer_dir="$layers_dir/libtorch"
+mkdir -p "$layer_dir"
+
+# Layer types: cached across builds (cache=true), available to subsequent
+# build phases (build=true), available at runtime (launch=true).
+# Metadata.version makes the cache invalidate if we bump LIBTORCH_VERSION.
+cat > "$layers_dir/libtorch.toml" <<EOF
+[types]
+build  = true
+launch = true
+cache  = true
+
+[metadata]
+version = "$LIBTORCH_VERSION"
+EOF
+
+if [ -d "$layer_dir/libtorch/include/torch" ]; then
+  echo "-----> LibTorch ${LIBTORCH_VERSION} (cache hit)"
+else
+  echo "-----> LibTorch ${LIBTORCH_VERSION} fetching $LIBTORCH_URL"
+  rm -rf "$layer_dir/libtorch"
+  cd "$layer_dir"
+  curl -fsSL -o libtorch.zip "$LIBTORCH_URL"
+  unzip -q libtorch.zip
+  rm libtorch.zip
+fi
+
+# Build-time env: heroku/ruby reads BUNDLE_BUILD__TORCH__RB so torch-rb's
+# mkmf step can find the staged libtorch headers.
+mkdir -p "$layer_dir/env.build"
+echo -n "--with-torch-dir=$layer_dir/libtorch" > "$layer_dir/env.build/BUNDLE_BUILD__TORCH__RB"
+
+# Runtime env: every dyno needs libtorch_cpu.so on LD_LIBRARY_PATH so
+# torch-rb's compiled extension can dlopen it.
+mkdir -p "$layer_dir/env.launch"
+echo -n "$layer_dir/libtorch/lib" > "$layer_dir/env.launch/LD_LIBRARY_PATH.prepend"
+echo -n ":" > "$layer_dir/env.launch/LD_LIBRARY_PATH.delim"
+
+echo "-----> LibTorch staged at $layer_dir/libtorch (build + launch + cache)"

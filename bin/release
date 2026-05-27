@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-# Heroku buildpack: release script. We don't add any default config vars or
-# Procfile entries — torch-rb's needs are entirely satisfied by compile.
-cat <<EOF
----
-config_vars: {}
-default_process_types: {}
-EOF
