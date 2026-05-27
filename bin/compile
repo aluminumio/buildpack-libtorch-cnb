@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Heroku buildpack: compile script.
+#
+# Provisions LibTorch C++ (CPU build) for torch-rb. Runs BEFORE heroku/ruby
+# in the buildpack chain so the headers + libs are present when bundle
+# install reaches the torch-rb gem.
+#
+#   BUILD_DIR=$1   # /tmp/build_<sha> at compile time; remapped to /app at runtime
+#   CACHE_DIR=$2   # persisted across deploys
+#   ENV_DIR=$3     # one file per config var (we read BUNDLE_BUILD__TORCH__RB)
+#
+# Caches the libtorch unzip in $CACHE_DIR/libtorch-${VERSION}/ so subsequent
+# deploys skip the 200 MB download.
+
+set -euo pipefail
+
+BUILD_DIR="${1:-}"
+CACHE_DIR="${2:-}"
+ENV_DIR="${3:-}"
+
+LIBTORCH_VERSION="${LIBTORCH_VERSION:-2.9.0}"
+if [ -n "$ENV_DIR" ] && [ -f "$ENV_DIR/LIBTORCH_VERSION" ]; then
+  LIBTORCH_VERSION="$(cat "$ENV_DIR/LIBTORCH_VERSION")"
+fi
+
+LIBTORCH_URL="https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-${LIBTORCH_VERSION}%2Bcpu.zip"
+CACHE_KEY="$CACHE_DIR/libtorch-${LIBTORCH_VERSION}"
+
+echo "-----> LibTorch ${LIBTORCH_VERSION} (CPU)"
+
+if [ -d "$CACHE_KEY/libtorch/include/torch" ]; then
+  echo "       cache hit"
+else
+  echo "       fetching $LIBTORCH_URL"
+  mkdir -p "$CACHE_KEY"
+  rm -rf "$CACHE_KEY/libtorch"
+  cd "$CACHE_KEY"
+  curl -fsSL -o libtorch.zip "$LIBTORCH_URL"
+  unzip -q libtorch.zip
+  rm libtorch.zip
+fi
+
+mkdir -p "$BUILD_DIR/.libtorch"
+cp -R "$CACHE_KEY/libtorch" "$BUILD_DIR/.libtorch/libtorch"
+
+# Tell bundler how to build torch-rb. The Ruby buildpack reads bundle config
+# from $BUILD_DIR/.bundle/config when invoking `bundle install`. The path
+# uses $HOME (i.e. /app at runtime, but also at compile time once heroku/ruby
+# stages the build) because mkmf compiles the extension during slug build.
+mkdir -p "$BUILD_DIR/.bundle"
+{
+  echo "---"
+  echo "BUNDLE_BUILD__TORCH__RB: \"--with-torch-dir=$BUILD_DIR/.libtorch/libtorch\""
+} >> "$BUILD_DIR/.bundle/config"
+
+# Runtime LD_LIBRARY_PATH (every dyno sources .profile.d/*.sh on startup).
+mkdir -p "$BUILD_DIR/.profile.d"
+cat > "$BUILD_DIR/.profile.d/libtorch.sh" <<'EOF'
+export LIBTORCH_DIR="$HOME/.libtorch/libtorch"
+export LD_LIBRARY_PATH="$LIBTORCH_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+EOF
+chmod +x "$BUILD_DIR/.profile.d/libtorch.sh"
+
+# Persist build-time env for downstream heroku/ruby compile step.
+mkdir -p "$BUILD_DIR/.profile.d"
+echo "       BUNDLE_BUILD__TORCH__RB set; runtime LD_LIBRARY_PATH wired"
+echo "       LibTorch staged at $BUILD_DIR/.libtorch/libtorch"

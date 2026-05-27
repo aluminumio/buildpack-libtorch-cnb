@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Heroku buildpack: detect script. Print the buildpack's framework name on
+# stdout when applicable. We always activate (the only reason this buildpack
+# is in the chain is because someone wanted it).
+echo "LibTorch"
+exit 0
