@@ -1,10 +1,10 @@
 api = "0.10"
 
 [buildpack]
-id      = "aluminumio/buildpack-libtorch"
-version = "0.0.2"
+id      = "aluminumio/buildpack-libtorch-cpu"
+version = "0.0.3"
 name    = "LibTorch CPU"
-homepage = "https://github.com/aluminumio/buildpack-libtorch"
+homepage = "https://github.com/aluminumio/buildpack-libtorch-cpu"
 
 [[stacks]]
 id = "heroku-24"
