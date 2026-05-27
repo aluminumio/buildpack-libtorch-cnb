@@ -18,12 +18,15 @@ BUILD_DIR="${1:-}"
 CACHE_DIR="${2:-}"
 ENV_DIR="${3:-}"
 
-LIBTORCH_VERSION="${LIBTORCH_VERSION:-2.9.0}"
+LIBTORCH_VERSION="${LIBTORCH_VERSION:-2.12.0}"
 if [ -n "$ENV_DIR" ] && [ -f "$ENV_DIR/LIBTORCH_VERSION" ]; then
   LIBTORCH_VERSION="$(cat "$ENV_DIR/LIBTORCH_VERSION")"
 fi
 
-LIBTORCH_URL="https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-${LIBTORCH_VERSION}%2Bcpu.zip"
+# Linux CPU build uses the pre-cxx11 ABI variant; the cxx11-abi variant of
+# CPU builds is not published for 2.12+. torch-rb 0.24.x pins libtorch 2.12.x
+# per its compatibility table.
+LIBTORCH_URL="https://download.pytorch.org/libtorch/cpu/libtorch-shared-with-deps-${LIBTORCH_VERSION}%2Bcpu.zip"
 CACHE_KEY="$CACHE_DIR/libtorch-${LIBTORCH_VERSION}"
 
 echo "-----> LibTorch ${LIBTORCH_VERSION} (CPU)"
