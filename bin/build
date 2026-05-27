@@ -41,10 +41,22 @@ else
   rm libtorch.zip
 fi
 
-# Build-time env: heroku/ruby reads BUNDLE_BUILD__TORCH__RB so torch-rb's
-# mkmf step can find the staged libtorch headers.
+# Build-time env: tell bundler where libtorch lives so torch-rb's mkmf step
+# finds it. Two channels in case one doesn't propagate:
+#   1. CNB env.build (preferred — exported to subsequent buildpacks)
+#   2. /workspace/.bundle/config (fallback — bundler reads from disk, works
+#      even if heroku/ruby's Qack shim ignores CNB env files)
 mkdir -p "$layer_dir/env.build"
 echo -n "--with-torch-dir=$layer_dir/libtorch" > "$layer_dir/env.build/BUNDLE_BUILD__TORCH__RB"
+
+mkdir -p /workspace/.bundle
+# Avoid duplicating if we are re-running (e.g. cache hit + retry).
+if [ ! -f /workspace/.bundle/config ] || ! grep -q "BUNDLE_BUILD__TORCH__RB" /workspace/.bundle/config 2>/dev/null; then
+  cat >> /workspace/.bundle/config <<EOF
+---
+BUNDLE_BUILD__TORCH__RB: "--with-torch-dir=$layer_dir/libtorch"
+EOF
+fi
 
 # Runtime env: every dyno needs libtorch_cpu.so on LD_LIBRARY_PATH so
 # torch-rb's compiled extension can dlopen it.
